@@ -24,9 +24,18 @@ Accessing data on vintage TRS-80 disk images often requires specialized tools or
 
 ## Installation
 
-### Quick Install (macOS/Linux)
+### Homebrew (macOS) - *Recommended (Coming Soon)*
 
-Run the included setup script to install `trsmount` and `superzap` to `/usr/local/bin`:
+We are working on adding `trsmount` to Homebrew. Once available, this will be the preferred installation method:
+
+```bash
+brew tap timw/trsdsk
+brew install trsmount
+```
+
+### Manual Installation (setup.sh)
+
+Until the Homebrew formula is published, or for Linux users, you can use the included setup script. This script creates a virtual environment and installs the necessary dependencies.
 
 ```bash
 ./setup.sh
