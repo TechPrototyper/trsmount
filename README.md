@@ -2,8 +2,7 @@
 
 **trsmount** allows you to mount TRS-80 disk images (`.dmk`, `.dsk`) as local directories on your computer. This enables you to read and write files to legacy TRSDOS and NEWDOS/80 disks using standard tools like Finder, Explorer, or the terminal.
 
-![TRS-80 Floppy Disk](https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/TRS-80_Model_III.jpg/640px-TRS-80_Model_III.jpg)
-*(Image placeholder: Imagine a 5.25" floppy disk with a Radio Shack logo here)*
+![TRS-80 Floppy Disk](resources/trs80_model_iii.jpg)
 
 ## Motivation
 
@@ -16,10 +15,10 @@ Accessing data on vintage TRS-80 disk images often requires specialized tools or
 - **Filesystem Support**: Supports TRSDOS 2.3 and NEWDOS/80 filesystems.
 - **Superzap Utility**: Includes a sector-level inspector for low-level analysis.
 
-## Prerequisites
+## Supported Platforms
 
-- **macOS**: Requires [FUSE-T](https://github.com/macos-fuse-t/fuse-t) (recommended) or macFUSE.
-- **Linux**: Requires `libfuse`.
+- **macOS**: Primary target platform. Requires [FUSE-T](https://github.com/macos-fuse-t/fuse-t) (recommended) or macFUSE.
+- **Linux**: Planned for future releases. Contributors are welcome to help verify and extend support!
 - **Python 3.6+**
 
 ## Installation
@@ -65,9 +64,9 @@ You can now access `./mnt` to see the files. When finished, unmount the director
 
 ```bash
 umount ./mnt
-# or on macOS
-diskutil unmount ./mnt
 ```
+
+(Note: On macOS, you can also use `diskutil unmount ./mnt`)
 
 ### Inspecting a Disk (Superzap)
 
@@ -81,7 +80,7 @@ superzap disk.dmk
 
 - [Tim Mann's TRS-80 Pages](http://www.tim-mann.org/trs80.html) - Essential emulator and technical info.
 - [Ira Goldklang's TRS-80 Revived Site](http://www.trs-80.com/) - Comprehensive history and archive.
-- [48k.ca](https://48k.ca/) - George Philips great pool of resources, including world's most famous trs80gp TRS-80 emulator.
+- [48k.ca](https://48k.ca/) - George Phillips great pool of resources, including world's most famous trs80gp TRS-80 emulator.
 - [Willus.com TRS-80 Library](http://www.willus.com/trs80/) - Massive archive of manuals and software.
 
 ## License
