@@ -29,7 +29,7 @@ Accessing data on vintage TRS-80 disk images often requires specialized tools or
 We are working on adding `trsmount` to Homebrew. Once available, this will be the preferred installation method:
 
 ```bash
-brew tap timw/trsdsk
+brew tap TechPrototyper/trsmount
 brew install trsmount
 ```
 
