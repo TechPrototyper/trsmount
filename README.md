@@ -2,7 +2,7 @@
 
 **trsmount** allows you to mount TRS-80 disk images (`.dmk`, `.dsk`) as local directories on your computer. This enables you to read and write files to legacy TRSDOS and NEWDOS/80 disks using standard tools like Finder, Explorer, or the terminal.
 
-![TRS-80 Floppy Disk](resources/trs80_model_iii.jpg)
+![TRS-80 Floppy Disk](resources/trs80_model4.jpg)
 
 ## Motivation
 
