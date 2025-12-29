@@ -1,0 +1,7 @@
+# No external dependencies are required for the basic driver.
+# The script uses only the Python standard library (os, sys, struct).
+
+# Optional development tools:
+pytest
+black
+flake8

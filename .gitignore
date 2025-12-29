@@ -1,0 +1,9 @@
+venv/
+.venv/
+.misc/
+__pycache__/
+*.pyc
+.DS_Store
+test/
+man/
+mnt/
