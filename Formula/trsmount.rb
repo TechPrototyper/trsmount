@@ -4,7 +4,7 @@ class Trsmount < Formula
   desc "FUSE filesystem for TRS-80 disk images"
   homepage "https://github.com/TechPrototyper/trsmount"
   url "https://github.com/TechPrototyper/trsmount/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "REPLACE_WITH_SHA256"
+  sha256 "333b93f051653f4262d92199ba8ae0339e9fbebdff987d7ffd4f1ac62563319d"
   license "MIT"
 
   depends_on "python@3.13"

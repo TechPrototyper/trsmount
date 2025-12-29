@@ -24,9 +24,9 @@ Accessing data on vintage TRS-80 disk images often requires specialized tools or
 
 ## Installation
 
-### Homebrew (macOS) - *Recommended (Coming Soon)*
+### Homebrew (macOS) - *Recommended*
 
-We are working on adding `trsmount` to Homebrew. Once available, this will be the preferred installation method:
+The preferred installation method on macOS is via Homebrew:
 
 ```bash
 brew tap TechPrototyper/trsmount
