@@ -48,10 +48,6 @@ This project is configured as a standard Python package. You can install it in e
 pip install -e .
 ```
 
-### Homebrew (macOS)
-
-*Coming soon!* A Homebrew formula is provided in `Formula/trsmount.rb` for future distribution.
-
 ## Usage
 
 ### Mounting a Disk
