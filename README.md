@@ -6,7 +6,9 @@
 
 ## Motivation
 
-Accessing data on vintage TRS-80 disk images often requires specialized tools or emulators. **trsmount** bridges the gap by integrating these images directly into your modern operating system. Whether you are researching old software, recovering data, or just curious about the file structures of the 80s, this tool makes it seamless.
+Accessing data on vintage TRS-80 disk images often requires specialized tools or emulators. **trsmount** bridges the gap by integrating these images directly into your modern operating system.
+
+This is particularly powerful when combined with modern development toolchains. For example, using Visual Studio Code with the [TRS-80 gp Extension](https://github.com/TechPrototyper/trs80gpExt), you can compile your code and then seamlessly copy the resulting binaries (e.g., `MYPROG.CMD`) directly onto a virtual floppy disk. The driver automatically handles the conversion to TRSDOS format (e.g., `MYPROG/CMD`), making the workflow from "Code" to "Running on TRS-80" frictionless.
 
 ## Features
 
@@ -81,4 +83,8 @@ superzap disk.dmk
 
 ## License
 
-MIT License
+**MIT License**
+
+This software is provided "as is", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use or other dealings in the software.
+
+*Note: This software interacts with legacy filesystem formats. While every effort has been made to ensure reliability, disk images may contain third-party software or data with their own licensing restrictions. The user assumes all risks associated with modifying disk images.*
