@@ -232,10 +232,14 @@ class TRSDOS_FUSE(Operations):
 
 
 
-if __name__ == '__main__':
+def main():
     import argparse
     
+    # Allow overriding program name via environment variable (for wrapper scripts)
+    prog_name = os.environ.get("TRS_PROG_NAME")
+
     parser = argparse.ArgumentParser(
+        prog=prog_name,
         description="Mount TRS-80 disk images (DMK/JV1/JV3) as a FUSE filesystem.",
         epilog="Example: trsmount disk.dmk ./mnt"
     )
@@ -261,3 +265,6 @@ if __name__ == '__main__':
         print(f"Failed to mount: {e}")
         print("Ensure FUSE-T or macFUSE is installed and libfuse is available.")
         sys.exit(1)
+
+if __name__ == '__main__':
+    main()

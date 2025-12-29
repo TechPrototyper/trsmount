@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trsmount"
+version = "0.1.0"
+description = "FUSE filesystem for TRS-80 disk images"
+readme = "README.md"
+authors = [
+  { name = "Tim W", email = "tim@example.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fusepy>=3.0.1",
+]
+requires-python = ">=3.7"
+
+[project.scripts]
+trsmount = "trs80_fuse:main"
+superzap = "superzap:main"
+
+[tool.setuptools]
+py-modules = ["trs80_driver", "trs80_fuse", "superzap"]

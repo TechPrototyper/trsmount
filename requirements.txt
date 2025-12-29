@@ -2,6 +2,7 @@
 # The script uses only the Python standard library (os, sys, struct).
 
 # Optional development tools:
+fusepy
 pytest
 black
 flake8

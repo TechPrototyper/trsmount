@@ -39,6 +39,7 @@ echo "Creating executables in $BIN_DIR..."
 # trsmount
 sudo tee "$BIN_DIR/trsmount" > /dev/null <<EOF
 #!/bin/bash
+export TRS_PROG_NAME="trsmount"
 "$INSTALL_DIR/.venv/bin/python3" "$INSTALL_DIR/trs80_fuse.py" "\$@"
 EOF
 sudo chmod +x "$BIN_DIR/trsmount"
@@ -46,6 +47,7 @@ sudo chmod +x "$BIN_DIR/trsmount"
 # superzap
 sudo tee "$BIN_DIR/superzap" > /dev/null <<EOF
 #!/bin/bash
+export TRS_PROG_NAME="superzap"
 "$INSTALL_DIR/.venv/bin/python3" "$INSTALL_DIR/superzap.py" "\$@"
 EOF
 sudo chmod +x "$BIN_DIR/superzap"

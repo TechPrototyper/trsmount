@@ -24,19 +24,25 @@ Accessing data on vintage TRS-80 disk images often requires specialized tools or
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/timw/trsmount.git
-   cd trsmount
-   ```
+### Quick Install (macOS/Linux)
 
-2. Run the setup script:
-   ```bash
-   chmod +x setup.sh
-   ./setup.sh
-   ```
-   
-   The script will offer to install the tools system-wide (e.g., `/usr/local/bin/trsmount`).
+Run the included setup script to install `trsmount` and `superzap` to `/usr/local/bin`:
+
+```bash
+./setup.sh
+```
+
+### Developer Install
+
+This project is configured as a standard Python package. You can install it in editable mode:
+
+```bash
+pip install -e .
+```
+
+### Homebrew (macOS)
+
+*Coming soon!* A Homebrew formula is provided in `Formula/trsmount.rb` for future distribution.
 
 ## Usage
 

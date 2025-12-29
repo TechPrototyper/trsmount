@@ -25,7 +25,13 @@ def hex_dump(data):
     return "\n".join(output)
 
 def main():
-    parser = argparse.ArgumentParser(description="Superzap - TRS-80 Disk Image Inspector")
+    # Allow overriding program name via environment variable (for wrapper scripts)
+    prog_name = os.environ.get("TRS_PROG_NAME")
+    
+    parser = argparse.ArgumentParser(
+        prog=prog_name,
+        description="Superzap - TRS-80 Disk Image Inspector"
+    )
     parser.add_argument("file", nargs="?", help="Disk image file (.dmk or .dsk)")
     
     args = parser.parse_args()
