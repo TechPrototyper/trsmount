@@ -648,27 +648,19 @@ class TRSDOSFileSystem:
 
         target_entry = None
         
-        for sector in range(start_sector, end_sector):
-            data = self.disk.read_sector(self.dir_track, 0, sector)
-            if not data: continue
-
-            for i in range(0, 256, 32):
-                entry = data[i:i+32]
-                attr = entry[0]
-                if attr == 0 or attr == 0xFF or (attr & 0x80): continue
-                
-                raw_name = entry[5:13]
-                raw_ext = entry[13:16]
-                try:
-                    name = raw_name.decode(self.encoding).strip()
-                    ext = raw_ext.decode(self.encoding).strip()
-                    full_name = f"{name}/{ext}"
-                    if full_name == filename:
-                        target_entry = entry
-                        break
-                except:
-                    continue
-            if target_entry: break
+        for sector, offset, entry in self._iter_directory_entries():
+            attr = entry[0]
+            raw_name = entry[5:13]
+            raw_ext = entry[13:16]
+            try:
+                name = raw_name.decode(self.encoding).strip()
+                ext = raw_ext.decode(self.encoding).strip()
+                full_name = f"{name}/{ext}"
+                if full_name == filename:
+                    target_entry = entry
+                    break
+            except:
+                continue
             
         if not target_entry:
             return None
@@ -717,7 +709,10 @@ class TRSDOSFileSystem:
         else:
             # Offset Format
             raw_eof = (eof_high << 16) | (eof_mid << 8) | eof_low
-            file_size = raw_eof - 255
+            if raw_eof >= 255:
+                file_size = raw_eof - 255
+            else:
+                file_size = raw_eof
             
         # print(f"DEBUG: File Size: {file_size} bytes")
         
@@ -743,34 +738,43 @@ class TRSDOSFileSystem:
             
             # Parse Info
             # Bits 5-7: Start Granule
-            # Bits 0-4: Count - 1
+            # Bits 0-4: Count
+            # Note: Some sources say Count-1, but empirical evidence (ADVENTUR/ASM, 3DTTTTAS/ASM)
+            # suggests Count is the raw value (0-31), or at least that 31 means 31 granules
+            # and avoids overlap with the next extent.
             
             start_granule = (info >> 5) & 0x07
-            count = (info & 0x1F) + 1
+            count = (info & 0x1F)
             
             # print(f"DEBUG: Extent {i}: Track {track}, Start Granule {start_granule}, Count {count}")
             
+            current_track = track
+            current_granule_in_track = start_granule
+            
             for g in range(count):
-                current_granule = start_granule + g
+                # Handle track wrapping
+                while current_granule_in_track >= granules_per_track:
+                    current_granule_in_track -= granules_per_track
+                    current_track += 1
                 
-                # Calculate Sector Start
-                # Assuming 2 granules per track (0 and 1)
-                # Granule 0: Sectors 0-4
-                # Granule 1: Sectors 5-9
+                # Calculate start sector for this granule
+                # Generic formula: granule * sectors_per_granule + offset
+                # Offset depends on 0-based or 1-based sectors.
+                # self.dir_sector_offset is 0 or 1.
+                # But wait, dir_sector_offset applies to Directory Track.
+                # Does it apply to all tracks? Usually yes.
                 
-                start_sector = 0
-                if current_granule == 1:
-                    start_sector = 5
-                elif current_granule > 1:
-                    start_sector = current_granule * sectors_per_granule
+                start_sector = current_granule_in_track * sectors_per_granule + self.dir_sector_offset
                 
                 for s in range(sectors_per_granule):
                     sector = start_sector + s
-                    data = self.disk.read_sector(track, 0, sector)
+                    data = self.disk.read_sector(current_track, 0, sector)
                     if data:
                         content.extend(data)
                     else:
                         content.extend(b'\x00' * 256)
+                
+                current_granule_in_track += 1
                         
         # Truncate to EOF
         if len(content) > file_size:
@@ -784,14 +788,45 @@ class TRSDOSFileSystem:
         sectors_per_granule = 5
         granules_per_track = 2
         
-        # Check geometry
-        geo = self.disk.get_geometry()
-        if "JV3" in geo or "DMK" in geo:
-            # Check if DD
-            # If 18 sectors/track, usually 3 granules of 6 sectors
-            # How to detect?
-            # Check GAT size?
-            pass
+        # Check geometry by counting sectors on Track 0
+        # (Assuming Track 0 is representative)
+        sector_count = 0
+        for s in range(30):
+            if self.disk.read_sector(0, 0, s):
+                sector_count += 1
+        
+        if sector_count >= 18:
+            # Double Density
+            # Check GAT to distinguish 6 vs 9 granules
+            # GAT is usually at Track 17, Sector 0 (or 1 if 1-based)
+            gat_sector = self.disk.read_sector(self.dir_track, 0, self.dir_sector_offset)
+            if gat_sector:
+                # Heuristic: Check first few bytes for bitmasks
+                # If we see 0x3F (00111111), it's 6 granules (bits 0-5)
+                # If we see 0xFF or 0x1FF (if 16-bit?), it's likely 8 or 9.
+                # But GAT is bytes.
+                # If 9 granules, maybe 2 bytes per track? Or packed bits?
+                # TRSDOS 2.3 uses 1 byte per granule (linked list).
+                # NEWDOS/80 uses 1 bit per granule in GAT?
+                # The dump showed 3F 3C 0F...
+                # 3F = 6 bits set.
+                # So 6 granules per track.
+                if gat_sector[0] == 0x3F or gat_sector[0] == 0x3C:
+                    granules_per_track = 6
+                    sectors_per_granule = 3
+                else:
+                    # Fallback or other format
+                    # Assume 6 for 18-sector DD as it's common
+                    granules_per_track = 6
+                    sectors_per_granule = 3
+            else:
+                # Can't read GAT, assume standard DD
+                granules_per_track = 6
+                sectors_per_granule = 3
+        else:
+            # Single Density
+            sectors_per_granule = 5
+            granules_per_track = 2
             
         return sectors_per_granule, granules_per_track
 
@@ -807,28 +842,20 @@ class TRSDOSFileSystem:
         target_entry_loc = None # (sector, offset)
         target_entry = None
         
-        for sector in range(start_sector, end_sector):
-            data = self.disk.read_sector(self.dir_track, 0, sector)
-            if not data: continue
-
-            for i in range(0, 256, 32):
-                entry = data[i:i+32]
-                attr = entry[0]
-                if attr == 0 or attr == 0xFF or (attr & 0x80): continue
-                
-                raw_name = entry[5:13]
-                raw_ext = entry[13:16]
-                try:
-                    name = raw_name.decode(self.encoding).strip()
-                    ext = raw_ext.decode(self.encoding).strip()
-                    full_name = f"{name}/{ext}"
-                    if full_name == filename:
-                        target_entry = entry
-                        target_entry_loc = (sector, i)
-                        break
-                except:
-                    continue
-            if target_entry: break
+        for sector, offset, entry in self._iter_directory_entries():
+            attr = entry[0]
+            raw_name = entry[5:13]
+            raw_ext = entry[13:16]
+            try:
+                name = raw_name.decode(self.encoding).strip()
+                ext = raw_ext.decode(self.encoding).strip()
+                full_name = f"{name}/{ext}"
+                if full_name == filename:
+                    target_entry = entry
+                    target_entry_loc = (sector, offset)
+                    break
+            except:
+                continue
             
         if not target_entry:
             return False # File not found
@@ -1124,11 +1151,27 @@ class TRSDOSFileSystem:
         # but reading non-existent sectors returns None, so it's safe to try more.
         end_sector = 18 + self.dir_sector_offset
 
-        # Special handling for NEWDOS/80 System Disks
-        # Sectors 0-9 are System Files. User Directory might start at Sector 10.
+    def _is_valid_filename(self, b):
+        # Allow letters, numbers, space, and some symbols
+        # Stricter check: Must start with letter or number?
+        # TRSDOS: First char alpha.
+        if not b: return False
+        if not (65 <= b[0] <= 90 or 97 <= b[0] <= 122 or 48 <= b[0] <= 57):
+                # Allow space padding if name is empty? No, name shouldn't be empty.
+                return False
+        return all(32 <= x <= 126 for x in b)
+
+    def _iter_directory_entries(self):
+        """
+        Iterate over all valid directory entries.
+        Yields (sector, offset, entry_bytes)
+        """
+        start_sector = 2 + self.dir_sector_offset
+        end_sector = 18 + self.dir_sector_offset
+
         if self.system_type == "NEWDOS/80 (System)":
             start_sector = 10
-            end_sector = 18 # Scan more sectors (assuming DD/High Capacity)
+            end_sector = 18
         elif self.system_type == "NEWDOS/80 (Track 9)":
             start_sector = 10
             end_sector = 18
@@ -1138,92 +1181,93 @@ class TRSDOSFileSystem:
             if not data:
                 continue
 
-            for i in range(0, 256, 32):  # 8 entries per sector, 32 bytes each
-                entry = data[i:i+32]
-
-                # Check attribute byte
-                attr = entry[0]
+            # Scan every 16 bytes to handle non-standard strides (e.g. 48 bytes)
+            # Standard TRSDOS is 32 bytes.
+            # Some disks have 32-byte entries with 16-byte padding (48-byte stride).
+            for i in range(0, 256, 16):
+                if i + 32 > 256: break
                 
-                # Bit 4: 1=In-Use, 0=Free
-                if not (attr & 0x10):
-                    continue
+                entry = data[i:i+32]
+                attr = entry[0]
 
-                # Bit 7: 1=Extended Entry (FXDE), 0=Primary (FPDE)
-                # We only want Primary entries.
-                if attr & 0x80:
-                    continue
-                    
-                # Bit 6: System File (Optional info)
-                # Bit 3: Invisible (Optional info)
-
+                # Skip Extended Entries (FXDE)
+                if attr & 0x80: continue
                 
                 # Basic validity check: Not 00 and not FF
-                if attr == 0 or attr == 0xFF:
-                    continue
+                if attr == 0 or attr == 0xFF: continue
                 
-                # Filename
+                # Filename check
                 raw_name = entry[5:13]
+                if not self._is_valid_filename(raw_name): continue
+                
+                # Extension check
                 raw_ext = entry[13:16]
+                if not all(32 <= x <= 126 for x in raw_ext): continue
                 
-                # Heuristic: Valid filenames are usually ASCII alphanumeric
-                # If we find too many non-printable chars, it's likely garbage/wrong sector
-                def is_valid_name(b):
-                    # Allow letters, numbers, space, and some symbols
-                    # Stricter check: Must start with letter or number?
-                    # TRSDOS: First char alpha.
-                    if not b: return False
-                    if not (65 <= b[0] <= 90 or 97 <= b[0] <= 122 or 48 <= b[0] <= 57):
-                         # Allow space padding if name is empty? No, name shouldn't be empty.
-                         return False
-                    return all(32 <= x <= 126 for x in b)
-                
-                if not is_valid_name(raw_name):
-                    continue
-                
-                # Extension can be empty or valid chars
-                if not all(32 <= x <= 126 for x in raw_ext):
-                    continue
+                yield sector, i, entry
 
-                try:
-                    name = raw_name.decode(self.encoding).strip()
-                    ext = raw_ext.decode(self.encoding).strip()
-                except Exception:
-                    continue
+    def list_files(self):
+        """
+        List all files in the directory.
+        
+        Returns:
+            list: A list of dictionaries containing file metadata:
+                  {'name': str, 'size': int, 'attr': int, 'invisible': bool, 'system': bool}
+        """
+        files = []
+        
+        for sector, offset, entry in self._iter_directory_entries():
+            attr = entry[0]
+            raw_name = entry[5:13]
+            raw_ext = entry[13:16]
 
-                # Calculate Size
-                eof_low = entry[3]
-                eof_mid = entry[20]
-                eof_high = entry[21]
-                
-                sectors_per_granule, granules_per_track = self._get_allocation_info()
-                
-                total_sectors_allocated = 0
-                for k in range(5):
-                    offset = 22 + (k * 2)
-                    if offset >= 32: break
-                    track = entry[offset]
-                    if track == 0xFF or track == 0xFE: break
-                    info = entry[offset+1]
-                    count = (info & 0x1F) + 1
-                    total_sectors_allocated += count * sectors_per_granule
+            try:
+                name = raw_name.decode(self.encoding).strip()
+                ext = raw_ext.decode(self.encoding).strip()
+            except Exception:
+                continue
 
-                if eof_low == 0:
-                    last_sector_offset = (eof_high << 8) | eof_mid
-                    if total_sectors_allocated > 0:
-                        file_size = (total_sectors_allocated - 1) * 256 + (last_sector_offset + 1)
-                    else:
-                        file_size = 0
+            # Calculate Size
+            eof_low = entry[3]
+            eof_mid = entry[20]
+            eof_high = entry[21]
+            
+            sectors_per_granule, granules_per_track = self._get_allocation_info()
+            
+            total_sectors_allocated = 0
+            for k in range(5):
+                offset = 22 + (k * 2)
+                if offset >= 32: break
+                track = entry[offset]
+                if track == 0xFF or track == 0xFE: break
+                info = entry[offset+1]
+                count = (info & 0x1F) + 1
+                total_sectors_allocated += count * sectors_per_granule
+
+            if eof_low == 0:
+                last_sector_offset = (eof_high << 8) | eof_mid
+                if total_sectors_allocated > 0:
+                    file_size = (total_sectors_allocated - 1) * 256 + (last_sector_offset + 1)
                 else:
-                    raw_eof = (eof_high << 16) | (eof_mid << 8) | eof_low
+                    file_size = 0
+            else:
+                raw_eof = (eof_high << 16) | (eof_mid << 8) | eof_low
+                # If raw_eof is less than 255, it might be an error or special case.
+                # But standard formula is raw_eof - 255.
+                if raw_eof >= 255:
                     file_size = raw_eof - 255
+                else:
+                    # Fallback or error?
+                    # Maybe it's just raw_eof?
+                    file_size = raw_eof
 
-                files.append({
-                    'name': f"{name}/{ext}",
-                    'size': file_size,
-                    'attr': attr,
-                    'invisible': (attr & 0x08) != 0,
-                    'system': (attr & 0x40) != 0
-                })
+            files.append({
+                'name': f"{name}/{ext}",
+                'size': file_size,
+                'attr': attr,
+                'invisible': (attr & 0x08) != 0,
+                'system': (attr & 0x40) != 0
+            })
 
         return files
 
