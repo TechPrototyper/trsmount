@@ -48,6 +48,9 @@ def main():
         for b in content:
             val = b & 0x7F # Strip high bit
             
+            if val == 0x1A: # EOF
+                break
+            
             if val == 0x0D: # CR -> Newline
                 line_str = current_line.decode('ascii', errors='replace')
                 decoded_lines.append(line_str)
