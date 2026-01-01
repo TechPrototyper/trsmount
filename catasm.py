@@ -33,6 +33,7 @@ def main():
         # Process content
         decoded_lines = []
         current_line = bytearray()
+        last_was_cr = False
         
         for b in content:
             val = b & 0x7F # Strip high bit
@@ -41,10 +42,20 @@ def main():
                 line_str = current_line.decode('ascii', errors='replace')
                 decoded_lines.append(line_str)
                 current_line = bytearray()
+                last_was_cr = True
             elif val == 0x0A: # LF
-                pass 
+                if last_was_cr:
+                    last_was_cr = False
+                    continue # Ignore LF after CR
+                
+                # LF without CR (Unix style)
+                line_str = current_line.decode('ascii', errors='replace')
+                decoded_lines.append(line_str)
+                current_line = bytearray()
+                last_was_cr = False
             else:
                 current_line.append(val)
+                last_was_cr = False
                 
         if current_line:
             decoded_lines.append(current_line.decode('ascii', errors='replace'))
