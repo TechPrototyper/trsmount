@@ -9,7 +9,13 @@ PSEUDO_OPS = {
 }
 
 def main():
-    parser = argparse.ArgumentParser(description="Display TRS-80 ASM files.")
+    # Allow overriding program name via environment variable (for wrapper scripts)
+    prog_name = os.environ.get("TRS_PROG_NAME")
+
+    parser = argparse.ArgumentParser(
+        prog=prog_name,
+        description="Display TRS-80 ASM files."
+    )
     parser.add_argument("filename", help="The ASM file to read")
     parser.add_argument("-n", "--nolinenumbers", action="store_true", help="Remove line numbers")
     parser.add_argument("-c", "--cc", action="store_true", help="Add colons to code labels")

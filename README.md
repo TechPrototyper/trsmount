@@ -16,6 +16,7 @@ This is particularly powerful when combined with modern development toolchains. 
 - **Format Support**: Handles DMK and DSK container formats.
 - **Filesystem Support**: Supports TRSDOS 2.3 and NEWDOS/80 filesystems.
 - **Superzap Utility**: Includes a sector-level inspector for low-level analysis.
+- **Catasm Utility**: A specialized viewer for TRS-80 Assembler source files, handling high-bit ASCII and formatting.
 
 ## Supported Platforms
 
@@ -66,12 +67,32 @@ umount ./mnt
 
 (Note: On macOS, you can also use `diskutil unmount ./mnt`)
 
-### Inspecting a Disk (Superzap)
+### Utilities
 
-Use the `superzap` utility to view raw sectors:
+#### Superzap (Disk Inspector)
+
+Use the `superzap` utility to view raw sectors of a disk image:
 
 ```bash
 superzap disk.dmk
+```
+
+#### Catasm (Assembler Source Viewer)
+
+TRS-80 assembler files often use high-bit ASCII characters for compression and specific formatting. `catasm` allows you to view these files in a readable format on modern systems.
+
+```bash
+# View a file
+catasm FILE.ASM
+
+# View without line numbers (useful for diffs or re-assembly)
+catasm -n FILE.ASM
+
+# Add colons to labels (for compatibility with some modern assemblers)
+catasm -c FILE.ASM
+
+# Combine options and pipe to an assembler (e.g., zmac)
+catasm -n -c FILE.ASM | zmac -
 ```
 
 ## Resources

@@ -28,7 +28,7 @@ fi
 # 3. System-wide installation
 echo "Creating installation directory at $INSTALL_DIR..."
 sudo mkdir -p "$INSTALL_DIR"
-sudo cp trs80_driver.py trs80_fuse.py superzap.py requirements.txt "$INSTALL_DIR/"
+sudo cp trs80_driver.py trs80_fuse.py superzap.py catasm.py requirements.txt "$INSTALL_DIR/"
 
 echo "Setting up virtual environment in $INSTALL_DIR..."
 sudo python3 -m venv "$INSTALL_DIR/.venv"
@@ -52,5 +52,13 @@ export TRS_PROG_NAME="superzap"
 EOF
 sudo chmod +x "$BIN_DIR/superzap"
 
+# catasm
+sudo tee "$BIN_DIR/catasm" > /dev/null <<EOF
+#!/bin/bash
+export TRS_PROG_NAME="catasm"
+"$INSTALL_DIR/.venv/bin/python3" "$INSTALL_DIR/catasm.py" "\$@"
+EOF
+sudo chmod +x "$BIN_DIR/catasm"
+
 echo "Installation complete!"
-echo "You can now use 'trsmount' and 'superzap' from anywhere."
+echo "You can now use 'trsmount', 'superzap', and 'catasm' from anywhere."
