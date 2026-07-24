@@ -24,6 +24,8 @@ requires-python = ">=3.7"
 trsmount = "trs80_fuse:main"
 superzap = "superzap:main"
 catasm = "catasm:main"
+trsdc = "trsdc:main"
 
 [tool.setuptools]
-py-modules = ["trs80_driver", "trs80_fuse", "superzap", "catasm"]
+py-modules = ["trs80_driver", "trs80_fuse", "superzap", "catasm", "trsdc"]
+

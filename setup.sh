@@ -20,15 +20,16 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Setting up local development environment only..."
     python3 -m venv .venv
     ./.venv/bin/pip install -r requirements.txt
-    chmod +x trsmount.sh
-    echo "Done. Use ./trsmount.sh to run."
+    chmod +x trsmount.sh trsdc.sh
+    echo "Done. Use ./trsmount.sh or ./trsdc.sh to run."
     exit 0
+
 fi
 
 # 3. System-wide installation
 echo "Creating installation directory at $INSTALL_DIR..."
 sudo mkdir -p "$INSTALL_DIR"
-sudo cp trs80_driver.py trs80_fuse.py superzap.py catasm.py requirements.txt "$INSTALL_DIR/"
+sudo cp trs80_driver.py trs80_fuse.py superzap.py catasm.py trsdc.py requirements.txt "$INSTALL_DIR/"
 
 echo "Setting up virtual environment in $INSTALL_DIR..."
 sudo python3 -m venv "$INSTALL_DIR/.venv"
@@ -60,5 +61,14 @@ export TRS_PROG_NAME="catasm"
 EOF
 sudo chmod +x "$BIN_DIR/catasm"
 
+# trsdc
+sudo tee "$BIN_DIR/trsdc" > /dev/null <<EOF
+#!/bin/bash
+export TRS_PROG_NAME="trsdc"
+"$INSTALL_DIR/.venv/bin/python3" "$INSTALL_DIR/trsdc.py" "\$@"
+EOF
+sudo chmod +x "$BIN_DIR/trsdc"
+
 echo "Installation complete!"
-echo "You can now use 'trsmount', 'superzap', and 'catasm' from anywhere."
+echo "You can now use 'trsmount', 'superzap', 'catasm', and 'trsdc' from anywhere."
+

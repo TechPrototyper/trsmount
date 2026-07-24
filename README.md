@@ -13,10 +13,12 @@ This is particularly powerful when combined with modern development toolchains. 
 ## Features
 
 - **Read/Write Support**: Copy files to and from disk images.
-- **Format Support**: Handles DMK and DSK container formats.
+- **Format Support**: Handles DMK, JV3, and JV1 container formats.
 - **Filesystem Support**: Supports TRSDOS 2.3 and NEWDOS/80 filesystems.
 - **Superzap Utility**: Includes a sector-level inspector for low-level analysis.
 - **Catasm Utility**: A specialized viewer for TRS-80 Assembler source files, handling high-bit ASCII and formatting.
+- **TRSDC Utility**: A standalone disk converter between DMK, JV3, and JV1/Raw image formats.
+
 
 ## Supported Platforms
 
@@ -94,6 +96,60 @@ catasm -c FILE.ASM
 # Combine options and pipe to an assembler (e.g., zmac)
 catasm -n -c FILE.ASM | zmac -
 ```
+
+#### TRSDC (TRS-80 Disk Convert Utility)
+
+`trsdc` is a flexible disk image conversion utility for TRS-80 disk formats (**DMK**, **JV3** / `.dsk`, and **JV1** / raw sector dumps).
+
+It automatically detects the source disk format and infers the target format from the destination file extension (`.dmk`, `.dsk`, `.jv1`). Optional `-if` and `-of` flags allow explicit overrides for format type and disk geometry.
+
+##### Supported Formats
+
+| Format | Extension | Description |
+| :--- | :--- | :--- |
+| **DMK** | `.dmk` | Track-level format with IDAM/DAM markers and bit-level timing. Supports SD/DD, 1 or 2 sides, 35/40/80 tracks. |
+| **JV3** | `.dsk`, `.jv3` | Sector-header format containing track, sector, and density/side flag bytes per sector payload. |
+| **JV1** | `.jv1`, `.raw` | Simple flat array of 256-byte sectors without container headers. |
+
+##### Command Syntax & Options
+
+```bash
+trsdc -i <input_file> -o <output_file> [-if <spec>] [-of <spec>] [-v]
+```
+
+- `-i`, `--input`: Source disk image path (required).
+- `-o`, `--output`: Destination disk image path (required). Format inferred from extension unless `-of format=...` is specified.
+- `-if`, `--input-format`: Input format & geometry override string.
+- `-of`, `--output-format`: Output format & geometry override string.
+- `-v`, `--verbose`: Print detailed geometry and sector count progress.
+
+##### Geometry Specification Syntax (`-if` and `-of`)
+
+Specifications accept key-value pairs or positional shorthand:
+- **Key-Value**: `format=dmk,tracks=40,sides=1,density=sd`
+- **Shorthand**: `dmk,40t,1s,sd` or `jv1,35,1`
+
+| Key | Values | Description |
+| :--- | :--- | :--- |
+| `format`, `fmt` | `dmk`, `jv3`, `jv1` | Target format type |
+| `tracks`, `t` | `35`, `40`, `77`, `80` | Number of tracks (cylinders) |
+| `sides`, `s` | `1`, `2` | Number of heads / sides |
+| `density`, `d` | `sd` (Single / FM), `dd` (Double / MFM) | Encoding density |
+
+##### Examples
+
+```bash
+# Convert DMK to JV3 / DSK (automatic extension matching)
+trsdc -i disk.dmk -o disk.dsk
+
+# Convert DSK to DMK with verbose output
+trsdc -i disk.dsk -o disk.dmk -v
+
+# Convert a raw sector dump to DMK with explicit geometry override
+trsdc -i rawdisk.img -o disk.dmk -if format=jv1,tracks=40,sides=1 -of format=dmk,density=dd
+```
+
+
 
 ## Resources
 

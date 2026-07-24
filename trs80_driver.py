@@ -78,6 +78,14 @@ class DiskImage:
         """Return a string describing the disk geometry."""
         raise NotImplementedError
 
+    def get_all_sectors(self):
+        """Return a dict mapping (track, side, sector) to 256-byte sector data."""
+        raise NotImplementedError
+
+    def get_geometry_info(self):
+        """Return a dict describing geometry: tracks, sides, sectors_per_track, density, sector_size, format."""
+        raise NotImplementedError
+
 
 class JV1Image(DiskImage):
     """
@@ -89,52 +97,15 @@ class JV1Image(DiskImage):
     def __init__(self, filename):
         super().__init__(filename)
         # Heuristic: Guess geometry from file size
-        # Common sizes:
-        # 35 tracks * 10 sectors * 256 = 89600
-        # 40 tracks * 10 sectors * 256 = 102400
-        # 40 tracks * 18 sectors * 256 = 184320
-        # 80 tracks * 10 sectors * 256 = 204800
-        # 200448 is close to 204800 (80 tracks SD) or 40 tracks DS SD.
-        
         self.sectors_per_track = 10 # Default to SD
         self.sides = 1
         
         if self.file_size > 180000:
-             # Could be 80 tracks SD or 40 tracks DS or 40 tracks DD
-             # If it's DD (18 sectors), 40 tracks = 184320.
-             # If it's SD (10 sectors), 80 tracks = 204800.
-             # 200448 is closer to 204800.
              pass
 
     def read_sector(self, track, side, sector):
-        # Support both SD (10) and DD (18) via simple mapping?
-        # For JV1, it's just a flat list of sectors.
-        # We map (track, side, sector) to a linear index.
-        
-        # If we assume Single Sided:
-        # index = track * sectors_per_track + sector
-        
-        # If we assume Double Sided:
-        # index = (track * sides + side) * sectors_per_track + sector
-        # But JV1 is usually Single Sided.
-        
-        # Let's try to be flexible.
-        # If the caller asks for sector > 9, maybe it's DD.
-        
-        # Calculate linear offset assuming 10 sectors/track for now
-        # If that fails, we might need to be smarter.
-        
-        # However, for the purpose of "scanning all sectors", we can just ignore track/sector structure
-        # and read linearly if we had a linear read method.
-        # But the interface is read_sector(track, side, sector).
-        
-        # Let's stick to standard JV1 = 10 sectors/track.
         if side != 0:
             return None
-            
-        # Handle 0-based or 1-based sector requests?
-        # Usually JV1 is 0-based (0-9).
-        # If sector >= 10, return None (for SD).
         if sector >= 10:
             return None
             
@@ -158,6 +129,36 @@ class JV1Image(DiskImage):
     def get_geometry(self):
         return "JV1 (Raw Sector Dump)"
 
+    def get_geometry_info(self):
+        spt = getattr(self, 'sectors_per_track', 10)
+        sides = getattr(self, 'sides', 1)
+        total_sectors = len(self.data) // SECTOR_SIZE
+        tracks = total_sectors // (spt * sides) if (spt * sides) > 0 else 0
+        if tracks == 0 and total_sectors > 0:
+            tracks = 1
+        return {
+            'tracks': tracks,
+            'sides': sides,
+            'sectors_per_track': spt,
+            'density': 'dd' if spt > 10 else 'sd',
+            'sector_size': SECTOR_SIZE,
+            'format': 'jv1'
+        }
+
+    def get_all_sectors(self):
+        geom = self.get_geometry_info()
+        sectors = {}
+        spt = geom['sectors_per_track']
+        sides = geom['sides']
+        tracks = geom['tracks']
+        for t in range(tracks):
+            for s in range(sides):
+                for sec in range(spt):
+                    data = self.read_sector(t, s, sec)
+                    if data:
+                        sectors[(t, s, sec)] = bytes(data)
+        return sectors
+
 
 class JV3Image(DiskImage):
     """
@@ -174,7 +175,6 @@ class JV3Image(DiskImage):
     def _parse_image(self):
         offset = 0
         while offset < len(self.data):
-            # Check for end of file or padding
             if offset + 3 > len(self.data):
                 break
             
@@ -182,16 +182,8 @@ class JV3Image(DiskImage):
             sector = self.data[offset+1]
             flags = self.data[offset+2]
             
-            # Check for unused entry
             if track == 0xFF:
-                # Skip this entry? Usually JV3 is packed, but 0xFF might indicate end or skip.
-                # However, standard JV3 parsing often just reads sequentially.
-                # If track is 0xFF, it might be a spacer, but usually we just stop or skip.
-                # Let's assume standard packed format.
-                offset += 3 # Skip header
-                # How much data to skip? 
-                # If it's a free entry, does it have data? 
-                # Usually JV3 is dense. Let's look at the size code.
+                offset += 3
                 size_code = flags & 0x03
                 data_len = 128 << size_code
                 offset += data_len
@@ -200,7 +192,6 @@ class JV3Image(DiskImage):
             side = (flags >> 4) & 1
             size_code = flags & 0x03
 
-            # Determine data length based on size code
             if size_code == 0:
                 data_len = 256
             elif size_code == 1:
@@ -219,13 +210,37 @@ class JV3Image(DiskImage):
         offset = self.sector_map.get((track, side, sector))
         if offset is None:
             return None
-        # Assume 256 bytes for now as it's standard for TRSDOS
         return self.data[offset:offset+256]
 
     def get_geometry(self):
-        tracks = max(k[0] for k in self.sector_map.keys()) + 1
-        sides = max(k[1] for k in self.sector_map.keys()) + 1
+        tracks = max((k[0] for k in self.sector_map.keys()), default=-1) + 1
+        sides = max((k[1] for k in self.sector_map.keys()), default=-1) + 1
         return f"JV3 ({tracks} Tracks, {sides} Sides)"
+
+    def get_geometry_info(self):
+        if not self.sector_map:
+            return {'tracks': 40, 'sides': 1, 'sectors_per_track': 10, 'density': 'sd', 'sector_size': SECTOR_SIZE, 'format': 'jv3'}
+        max_track = max(k[0] for k in self.sector_map.keys())
+        max_side = max(k[1] for k in self.sector_map.keys())
+        spt_counts = {}
+        for (t, s, sec) in self.sector_map.keys():
+            spt_counts[(t, s)] = spt_counts.get((t, s), 0) + 1
+        max_spt = max(spt_counts.values()) if spt_counts else 10
+
+        return {
+            'tracks': max_track + 1,
+            'sides': max_side + 1,
+            'sectors_per_track': max_spt,
+            'density': 'dd' if max_spt > 10 else 'sd',
+            'sector_size': SECTOR_SIZE,
+            'format': 'jv3'
+        }
+
+    def get_all_sectors(self):
+        sectors = {}
+        for (t, s, sec), offset in self.sector_map.items():
+            sectors[(t, s, sec)] = bytes(self.data[offset:offset+SECTOR_SIZE])
+        return sectors
 
 
 class DMKImage(DiskImage):
@@ -239,102 +254,27 @@ class DMKImage(DiskImage):
         self.num_tracks = self.data[1]
         self.track_len = self.data[2] + (self.data[3] << 8)
         
-        # Fix for invalid track count (e.g. NEWDOS80-2.dmk reports 254)
         if self.num_tracks == 0 or self.num_tracks > 100:
-            # Estimate from file size
-            # We don't know sides yet, so assume SS for calculation, then adjust
             self.num_tracks = (self.file_size - 16) // self.track_len
-            # If it's DS, this num_tracks will be Cylinders * 2.
-            # But usually num_tracks is Cylinders.
-            # We'll refine this in get_geometry or read_sector if needed.
-            # For now, just ensure it's not 254.
-            if self.num_tracks > 80:
-                 # Maybe it's DS?
-                 pass
 
-        # Spec: Bit 4: 1=Single Density. Bit 6: 1=Single Sided.
         self.is_single_density = (self.data[4] & 0x10) != 0
         self.is_single_sided = (self.data[4] & 0x40) != 0        
-        # Sanity Check: Ignore Header Flag if file size contradicts it
-        # Calculate expected size for Single Sided
         expected_size_ss = 16 + (self.num_tracks * self.track_len)
         if self.file_size == expected_size_ss:
             self.is_single_sided = True
-        
-        # If it were DS, expected size would be double (if num_tracks refers to cylinders)
-        # Or if num_tracks refers to total heads, it matches.
-        # But standard DMK usage: num_tracks = cylinders.
-        # So if file size matches num_tracks * len, it's SS.
+
     def read_sector(self, track, side, sector):
-        # This is complex because we have to parse the IDAM table for each track.
-        # Simplified logic:
         if self.is_single_sided and side > 0:
             return None
         
-        # Calculate track offset
-        # Header is 16 bytes.
-        track_idx = track
-        if not self.is_single_sided:
-            track_idx = track * 2 + side
-            
+        track_idx = track if self.is_single_sided else (track * 2 + side)
         track_start = 16 + (track_idx * self.track_len)
         if track_start >= len(self.data):
             return None
             
-        # Read IDAM table (64 entries, 2 bytes each)
-        # Each entry is an offset from track_start to the IDAM.
-        # Bit 15 set means double density?
-        
-        # We need to scan the IDAMs to find the matching sector number.
         for i in range(64):
             ptr_offset = track_start + (i * 2)
             ptr = self.data[ptr_offset] + (self.data[ptr_offset+1] << 8)
-
-            if ptr == 0:
-                break  # End of table
-
-            # Mask out flags (usually high bits) to get relative offset
-            idam_offset = ptr & 0x3FFF
-
-            # Go to IDAM
-            abs_idam = track_start + idam_offset
-            if abs_idam + 6 > len(self.data):
-                continue
-
-            s_track = self.data[abs_idam + 1]
-            s_sector = self.data[abs_idam + 3]
-
-            if s_sector == sector and s_track == track:
-                # Found it!
-                # Simple heuristic: Skip 7 bytes, look for FB/F8
-                search_start = abs_idam + 7
-                for k in range(50):
-                    # Normal or Deleted Data
-                    if self.data[search_start + k] in [0xFB, 0xF8]:
-                        data_start = search_start + k + 1
-                        # Assume 256 bytes
-                        return self.data[data_start:data_start + 256]
-                        
-        return None
-
-    def write_sector(self, track, side, sector, data):
-        if len(data) != 256: return False
-        
-        if self.is_single_sided and side > 0:
-            return False
-        
-        track_idx = track
-        if not self.is_single_sided:
-            track_idx = track * 2 + side
-            
-        track_start = 16 + (track_idx * self.track_len)
-        if track_start >= len(self.data):
-            return False
-            
-        for i in range(64):
-            ptr_offset = track_start + (i * 2)
-            ptr = self.data[ptr_offset] + (self.data[ptr_offset+1] << 8)
-
             if ptr == 0:
                 break
 
@@ -349,6 +289,43 @@ class DMKImage(DiskImage):
             if s_sector == sector and s_track == track:
                 search_start = abs_idam + 7
                 for k in range(50):
+                    if search_start + k >= len(self.data):
+                        break
+                    if self.data[search_start + k] in [0xFB, 0xF8]:
+                        data_start = search_start + k + 1
+                        return bytes(self.data[data_start:data_start + 256])
+                        
+        return None
+
+    def write_sector(self, track, side, sector, data):
+        if len(data) != 256: return False
+        if self.is_single_sided and side > 0:
+            return False
+        
+        track_idx = track if self.is_single_sided else (track * 2 + side)
+        track_start = 16 + (track_idx * self.track_len)
+        if track_start >= len(self.data):
+            return False
+            
+        for i in range(64):
+            ptr_offset = track_start + (i * 2)
+            ptr = self.data[ptr_offset] + (self.data[ptr_offset+1] << 8)
+            if ptr == 0:
+                break
+
+            idam_offset = ptr & 0x3FFF
+            abs_idam = track_start + idam_offset
+            if abs_idam + 6 > len(self.data):
+                continue
+
+            s_track = self.data[abs_idam + 1]
+            s_sector = self.data[abs_idam + 3]
+
+            if s_sector == sector and s_track == track:
+                search_start = abs_idam + 7
+                for k in range(50):
+                    if search_start + k >= len(self.data):
+                        break
                     if self.data[search_start + k] in [0xFB, 0xF8]:
                         data_start = search_start + k + 1
                         self.data[data_start:data_start + 256] = data
@@ -358,46 +335,218 @@ class DMKImage(DiskImage):
     def get_geometry(self):
         return f"DMK ({self.num_tracks} Tracks)"
 
+    def get_geometry_info(self):
+        sides = 1 if self.is_single_sided else 2
+        density = 'sd' if self.is_single_density else 'dd'
+        all_secs = self.get_all_sectors()
+        if all_secs:
+            max_t = max(k[0] for k in all_secs.keys())
+            tracks = max(self.num_tracks, max_t + 1)
+            spt_counts = {}
+            for (t, s, sec) in all_secs.keys():
+                spt_counts[(t, s)] = spt_counts.get((t, s), 0) + 1
+            max_spt = max(spt_counts.values()) if spt_counts else (10 if density == 'sd' else 18)
+        else:
+            tracks = self.num_tracks
+            max_spt = 10 if density == 'sd' else 18
 
-def detect_format(filename):
-    size = os.path.getsize(filename)
+        return {
+            'tracks': tracks,
+            'sides': sides,
+            'sectors_per_track': max_spt,
+            'density': density,
+            'sector_size': SECTOR_SIZE,
+            'format': 'dmk'
+        }
+
+    def get_all_sectors(self):
+        sectors = {}
+        sides = 1 if self.is_single_sided else 2
+        for t in range(self.num_tracks):
+            for s in range(sides):
+                track_idx = t if self.is_single_sided else (t * 2 + s)
+                track_start = 16 + (track_idx * self.track_len)
+                if track_start >= len(self.data):
+                    continue
+                for i in range(64):
+                    ptr_offset = track_start + (i * 2)
+                    ptr = self.data[ptr_offset] + (self.data[ptr_offset+1] << 8)
+                    if ptr == 0:
+                        break
+                    idam_offset = ptr & 0x3FFF
+                    abs_idam = track_start + idam_offset
+                    if abs_idam + 6 > len(self.data):
+                        continue
+                    s_track = self.data[abs_idam + 1]
+                    s_sector = self.data[abs_idam + 3]
+                    
+                    search_start = abs_idam + 7
+                    for k in range(50):
+                        if search_start + k >= len(self.data):
+                            break
+                        if self.data[search_start + k] in [0xFB, 0xF8]:
+                            data_start = search_start + k + 1
+                            if data_start + SECTOR_SIZE <= len(self.data):
+                                sectors[(s_track, s, s_sector)] = bytes(self.data[data_start:data_start + SECTOR_SIZE])
+                            break
+        return sectors
+
+
+def export_jv1(sectors_map, geometry):
+    """Export sectors map to JV1 (raw) bytearray."""
+    tracks = geometry.get('tracks', 40)
+    sides = geometry.get('sides', 1)
+    spt = geometry.get('sectors_per_track', 10)
     
-    # DMK Check
-    # Read header
+    buf = bytearray(tracks * sides * spt * SECTOR_SIZE)
+    for i in range(len(buf)):
+        buf[i] = 0xE5
+        
+    for (t, s, sec), data in sectors_map.items():
+        if t < tracks and s < sides and sec < spt:
+            offset = ((t * sides + s) * spt + sec) * SECTOR_SIZE
+            padded_data = data.ljust(SECTOR_SIZE, b'\xe5')[:SECTOR_SIZE]
+            buf[offset:offset+SECTOR_SIZE] = padded_data
+            
+    return buf
+
+
+def export_jv3(sectors_map, geometry):
+    """Export sectors map to JV3 bytearray."""
+    buf = bytearray()
+    density = geometry.get('density', 'sd')
+    density_flag = 0x04 if density == 'dd' else 0x00
+    
+    sorted_keys = sorted(sectors_map.keys())
+    for (t, s, sec) in sorted_keys:
+        data = sectors_map[(t, s, sec)]
+        flags = 0x00
+        if s == 1:
+            flags |= 0x10
+        flags |= density_flag
+        
+        hdr = bytes([t & 0xFF, sec & 0xFF, flags])
+        padded_data = data.ljust(SECTOR_SIZE, b'\xe5')[:SECTOR_SIZE]
+        buf.extend(hdr)
+        buf.extend(padded_data)
+        
+    return buf
+
+
+def export_dmk(sectors_map, geometry):
+    """Export sectors map to DMK bytearray."""
+    tracks = geometry.get('tracks', 40)
+    sides = geometry.get('sides', 1)
+    density = geometry.get('density', 'sd')
+    is_single_sided = (sides == 1)
+    is_single_density = (density == 'sd')
+    
+    track_len = 3264 if is_single_density else 6400
+    
+    header = bytearray(16)
+    header[0] = 0x00
+    header[1] = tracks & 0xFF
+    header[2] = track_len & 0xFF
+    header[3] = (track_len >> 8) & 0xFF
+    header[4] = (0x10 if is_single_density else 0x00) | (0x40 if is_single_sided else 0x00)
+    
+    data_buf = bytearray(header)
+    
+    sectors_by_track = {}
+    for (t, s, sec), data in sectors_map.items():
+        key = (t, s)
+        if key not in sectors_by_track:
+            sectors_by_track[key] = []
+        sectors_by_track[key].append((sec, data))
+        
+    total_physical_tracks = tracks if is_single_sided else tracks * 2
+    
+    for phys_t in range(total_physical_tracks):
+        if is_single_sided:
+            cyl = phys_t
+            side = 0
+        else:
+            cyl = phys_t // 2
+            side = phys_t % 2
+            
+        track_buf = bytearray(b'\x4e' if not is_single_density else b'\xff') * track_len
+        for i in range(128):
+            track_buf[i] = 0x00
+            
+        secs = sectors_by_track.get((cyl, side), [])
+        secs.sort(key=lambda x: x[0])
+        
+        cursor = 128
+        for idx, (sec_num, sec_data) in enumerate(secs):
+            if idx >= 64:
+                break
+            
+            ptr_val = cursor + 3 # IDAM starts at cursor + 3 after gap
+            if not is_single_density:
+                ptr_val |= 0x8000
+                
+            track_buf[idx * 2] = ptr_val & 0xFF
+            track_buf[idx * 2 + 1] = (ptr_val >> 8) & 0xFF
+            
+            # Write gap & IDAM header
+            cursor += 3
+            abs_idam = cursor
+            track_buf[abs_idam] = 0xFE
+            track_buf[abs_idam + 1] = cyl & 0xFF
+            track_buf[abs_idam + 2] = side & 0xFF
+            track_buf[abs_idam + 3] = sec_num & 0xFF
+            track_buf[abs_idam + 4] = 0x01
+            track_buf[abs_idam + 5] = 0x00
+            track_buf[abs_idam + 6] = 0x00
+            cursor += 7
+            
+            # Gap & DAM
+            cursor += 10
+            track_buf[cursor] = 0xFB
+            cursor += 1
+            
+            # Payload
+            padded_data = sec_data.ljust(SECTOR_SIZE, b'\xe5')[:SECTOR_SIZE]
+            track_buf[cursor:cursor+SECTOR_SIZE] = padded_data
+            cursor += SECTOR_SIZE
+            
+            # Post gap
+            cursor += 12
+            
+        data_buf.extend(track_buf)
+        
+    return data_buf
+
+
+def detect_format(filename, format_hint=None):
+    if format_hint:
+        fmt = format_hint.strip().lower()
+        if fmt == 'dmk':
+            return DMKImage(filename)
+        elif fmt in ('jv3', 'dsk'):
+            return JV3Image(filename)
+        elif fmt in ('jv1', 'raw'):
+            return JV1Image(filename)
+            
     with open(filename, 'rb') as f:
         header = f.read(16)
+        
+    num_tracks = header[1] if len(header) >= 2 else 0
+    track_len = header[2] + (header[3] << 8) if len(header) >= 4 else 0
     
-    is_dmk = False
-    if filename.lower().endswith('.dmk'):
-        # Check if header is plausible
-        num_tracks = header[1]
-        track_len = header[2] + (header[3] << 8)
-        
-        # Valid DMK usually has num_tracks <= 80 (or maybe 96)
-        # and track_len reasonable (e.g. < 20000)
-        if num_tracks > 0 and num_tracks <= 100 and track_len > 0 and track_len < 20000:
-            is_dmk = True
-        else:
-            # Header looks garbage. Might be a raw file named .dmk
-            is_dmk = False
-            
-    if is_dmk:
+    if len(header) >= 16 and (header[0] in (0x00, 0x80, 0xFF)) and (0 < num_tracks <= 100) and (2000 <= track_len <= 20000):
         return DMKImage(filename)
-        
-    # Try to parse as JV3
+
     try:
-        # JV3 usually has a specific structure, but hard to validate quickly without parsing.
-        # If it's not DMK, try JV3 then JV1.
-        # But JV1 is just raw data, so it matches everything.
-        # Let's check for JV3 signature? JV3 doesn't have a file header, just sector headers.
-        # If the first byte is 0xFF, it might be JV3 (unused track).
-        # If the first byte is < 80, it might be a track number.
-        pass
+        jv3_test = JV3Image(filename)
+        if len(jv3_test.sector_map) > 0:
+            return jv3_test
     except Exception:
         pass
 
-    # Fallback to JV1 (Raw)
     return JV1Image(filename)
+
+
 
 
 class TRSDOSFileSystem:
