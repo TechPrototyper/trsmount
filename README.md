@@ -17,8 +17,7 @@ This is particularly powerful when combined with modern development toolchains. 
 - **Filesystem Support**: Supports TRSDOS 2.3 and NEWDOS/80 filesystems.
 - **Superzap Utility**: Includes a sector-level inspector for low-level analysis.
 - **Catasm Utility**: A specialized viewer for TRS-80 Assembler source files, handling high-bit ASCII and formatting.
-- **TRSDC Utility**: A standalone disk converter between DMK, JV3, and JV1/Raw image formats.
-
+- **trsdc Utility**: A standalone disk converter between DMK, JV3, and JV1/Raw image formats.
 
 ## Supported Platforms
 
@@ -97,11 +96,20 @@ catasm -c FILE.ASM
 catasm -n -c FILE.ASM | zmac -
 ```
 
-#### TRSDC (TRS-80 Disk Convert Utility)
+#### trsdc (TRS-80 Disk Convert Utility)
 
 `trsdc` is a flexible disk image conversion utility for TRS-80 disk formats (**DMK**, **JV3** / `.dsk`, and **JV1** / raw sector dumps).
 
 It automatically detects the source disk format and infers the target format from the destination file extension (`.dmk`, `.dsk`, `.jv1`). Optional `-if` and `-of` flags allow explicit overrides for format type and disk geometry.
+
+##### Format Background: Understanding `.dsk`, JV1, JV3 & DMK
+
+In the TRS-80 emulator ecosystem, `.dsk` is a general file extension rather than a single unified file format:
+- **JV3 Format** (`.dsk`, `.jv3`): Created by Jeff Vavasour for Model III emulators. This is the **de facto standard for `.dsk` files** across most modern TRS-80 tools (e.g. `trs80gp`, `SDLTRS`). Each sector is preceded by a 3-byte header encoding track number, sector number, side, and density flags.
+- **JV1 / Raw Format** (`.dsk`, `.jv1`, `.raw`): Used by older Model I emulators. It contains a flat linear array of raw 256-byte sectors without container headers or sector flags.
+- **DMK Format** (`.dmk`): Designed by David M. Keil. A track-level format that stores raw track bytestreams, IDAM pointers, DAM markers, and precise sector layouts. It supports copy-protected disks and non-standard sector numbers.
+
+`trsdc` automatically inspects the internal file structure of incoming images. Even if a file is named `disk.dsk`, `trsdc` inspects its internal headers to determine whether it is JV3 or JV1. When writing to `.dsk`, `trsdc` defaults to JV3 (the modern standard), but you can generate JV1 `.dsk` files via `-of jv1`.
 
 ##### Supported Formats
 
@@ -148,8 +156,6 @@ trsdc -i disk.dsk -o disk.dmk -v
 # Convert a raw sector dump to DMK with explicit geometry override
 trsdc -i rawdisk.img -o disk.dmk -if format=jv1,tracks=40,sides=1 -of format=dmk,density=dd
 ```
-
-
 
 ## Resources
 

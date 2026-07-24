@@ -88,7 +88,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         prog=prog_name,
-        description="TRS-80 Disk Convert Utility (trsdc)."
+        description="trsdc - TRS-80 Disk Convert Utility."
     )
     parser.add_argument("-i", "--input", required=True, help="Input disk image file path")
     parser.add_argument("-o", "--output", required=True, help="Output disk image file path")
